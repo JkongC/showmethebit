@@ -1,12 +1,28 @@
 ﻿#include <print>
 #include <iostream>
 #include <array>
+#include <source_location>
 
 constexpr int BYTE_SIZE = 8;
 
+// 是否为大端序，这会影响打印的顺序。
 static consteval bool IsBigEndian()
 {
 	return std::endian::native == std::endian::big;
+}
+
+// 获取类型的字符串形式，省去手打的功夫。
+template<typename T>
+constexpr std::string_view GetTypeName()
+{
+#if defined (_MSC_VER)
+	std::string_view whole = std::source_location::current().function_name();
+	auto start = whole.find("GetTypeName");
+	auto end = whole.rfind(">");
+	return std::string_view{ whole.begin() + start + sizeof("GetTypeName"), whole.begin() + end };
+#else
+	static_assert(false, "This function is not enabled for current compiler.");
+#endif
 }
 
 static void PrintChar(char c)
@@ -18,6 +34,7 @@ static void PrintChar(char c)
 	std::print(" ");
 }
 
+// 将值转换为char类型以便打印。
 template<typename T>
 void PrintType(const T& val)
 {
@@ -39,42 +56,47 @@ void PrintType(const T& val)
 	std::println();
 }
 
+// 从cin获取值，忽略无效值。
 template<typename T>
-inline T TakeValue()
+void SafeInput(T& result)
 {
-	std::println("Then type a value: ");
-	T val{};
-	std::cin >> val;
+	std::cin >> result;
 	std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-	return val;
 }
 
+// 从cin获取值，然后打印。
 template<typename T>
 inline void FetchAndPrint()
 {
-	PrintType(TakeValue<T>());
+	std::println("Then type a value: ");
+	T val{};
+	SafeInput(val);
+	PrintType(val);
 	std::println();
 }
 
+// 为了简化类型相关操作，避免后续增加类型时徒增工作量。
 template<typename... Ts>
-constexpr std::array<void(*)(), sizeof...(Ts)> func_array{ &FetchAndPrint<Ts>... };
+struct TypeInfo
+{
+	static constexpr std::array<std::string_view, sizeof...(Ts)> names{	GetTypeName<Ts>()... };
+	static constexpr std::array<void(*)(), sizeof...(Ts)> print_funcs{ &FetchAndPrint<Ts>... };
+};
 
 int main()
 {
-	std::string_view types[] = {"int", "long", "short", "char", "float", "double", "unsigned int", "unsigned long", "unsigned short", "unsigned char"};
-	auto& func_table = func_array<int, long, short, char, float, double, unsigned int, unsigned long, unsigned short, unsigned char>;
+	using types = TypeInfo<int, long, short, char, float, double, unsigned int, unsigned long, unsigned short, unsigned char>;
 	std::print("Choose a type(or -1 to quit):\n");
-	for (int i = 1; i <= sizeof(types) / sizeof(std::string_view); ++i)
+	for (int i = 1; i <= sizeof(types::names) / sizeof(std::string_view); ++i)
 	{
-		std::println("({}) {}", i, types[i - 1]);
+		std::println("({}) {}", i, types::names[i - 1]);
 	}
 	std::println();
 	
 	while (true)
 	{
 		int opt;
-		std::cin >> opt;
-		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+		SafeInput(opt);
 
 		if (std::cin.fail())
 		{
@@ -84,15 +106,18 @@ int main()
 		}
 		else if (opt == -1)
 			break;
-		else if (opt < 1 || opt > func_table.size())
+		else if (opt < 1 || opt > types::print_funcs.size())
 			std::println("Invalid value, please type again.");
 		else
 		{
-			func_table[opt - 1]();
+			std::print("You chose type \"{}\". ", types::names[opt - 1]);
+			// 调用相应类型的打印函数。
+			types::print_funcs[opt - 1]();
 			std::println("Continue(or quit)? (y/n)");
+
 			char choice;
-			std::cin >> choice;
-			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			SafeInput(choice);
+
 			if (choice == 'n')
 				break;
 			else if (choice == 'y')
