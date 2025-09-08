@@ -1,0 +1,7 @@
+.vs/
+x64/
+showmethebit/
+
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
